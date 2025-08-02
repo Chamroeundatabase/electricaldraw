@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Center Load Dashboard</title>
+    <!-- Tailwind CSS CDN for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons for a modern look -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Chart.js CDN for the chart -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Custom styles for gradients and animations not available in Tailwind */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0c0a09; /* Deeper background */
+            transition: all 0.5s ease-in-out;
+        }
+
+        .card {
+            background: linear-gradient(145deg, #1f2937, #111827); /* Darker gradient for depth */
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+        
+        input[type="number"], button {
+            transition: all 0.2s ease-in-out;
+        }
+
+        .alert-flash {
+            animation: flash 1.5s infinite alternate;
+        }
+
+        @keyframes flash {
+            from {
+                border-color: #1f2937;
+                box-shadow: none;
+            }
+            to {
+                border-color: #ef4444; /* Red border */
+                box-shadow: 0 0 15px #ef4444; /* Red glow */
+            }
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4 md:p-8">
+
+    <div class="card max-w-2xl w-full p-6 md:p-8 rounded-2xl shadow-2xl space-y-6">
+        <h2 class="text-3xl font-extrabold text-white text-center tracking-wide">
+            DATA CENTER-MSC5-LOAD
+        </h2>
+
+        <!-- Chart Section -->
+        <div class="bg-gray-800 p-4 rounded-xl shadow-inner">
+            <canvas id="loadChart" class="w-full h-48 md:h-64"></canvas>
+        </div>
+
+        <!-- Controls and Display Section -->
+        <div class="bg-gray-800 p-6 rounded-xl shadow-md space-y-6">
+            <!-- Load Inputs -->
+            <div class="flex flex-col sm:flex-row justify-around items-center gap-4">
+                <div class="flex flex-col items-center group">
+                    <label for="ph1-input" class="text-sm font-medium text-gray-400 mb-1 transition-colors duration-200 group-hover:text-cyan-400">PH1 (A)</label>
+                    <input type="number" id="ph1-input" value="34" class="w-24 text-center bg-gray-700 text-white rounded-lg border border-gray-600 focus:ring-cyan-500 focus:border-cyan-500 p-2">
+                </div>
+                <div class="flex flex-col items-center group">
+                    <label for="ph2-input" class="text-sm font-medium text-gray-400 mb-1 transition-colors duration-200 group-hover:text-purple-400">PH2 (A)</label>
+                    <input type="number" id="ph2-input" value="44" class="w-24 text-center bg-gray-700 text-white rounded-lg border border-gray-600 focus:ring-purple-500 focus:border-purple-500 p-2">
+                </div>
+                <div class="flex flex-col items-center group">
+                    <label for="ph3-input" class="text-sm font-medium text-gray-400 mb-1 transition-colors duration-200 group-hover:text-amber-400">PH3 (A)</label>
+                    <input type="number" id="ph3-input" value="45" class="w-24 text-center bg-gray-700 text-white rounded-lg border border-gray-600 focus:ring-amber-500 focus:border-amber-500 p-2">
+                </div>
+            </div>
+
+            <!-- Threshold and PF Controls -->
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mt-4">
+                <div class="flex items-center space-x-2">
+                    <label for="threshold-input" class="text-sm text-gray-400">Threshold (KW):</label>
+                    <input type="number" id="threshold-input" value="20" class="w-24 text-center bg-gray-700 text-white rounded-lg border border-gray-600 focus:ring-red-500 focus:border-red-500 p-2">
+                </div>
+                <div class="flex items-center space-x-2">
+                    <label for="pf-input" class="text-sm text-gray-400">Power Factor:</label>
+                    <input type="number" id="pf-input" value="0.9" step="0.01" min="0" max="1" class="w-24 text-center bg-gray-700 text-white rounded-lg border border-gray-600 focus:ring-sky-500 focus:border-sky-500 p-2">
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex justify-center items-center gap-4 mt-6">
+                <button id="calculate-button" class="flex-1 px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    <i data-lucide="calculator" class="w-5 h-5 inline-block mr-2"></i>
+                    Update
+                </button>
+                <button id="save-button" class="flex-1 px-6 py-2 bg-cyan-600 text-white font-bold rounded-lg hover:bg-cyan-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500">
+                    <i data-lucide="save" class="w-5 h-5 inline-block mr-2"></i>
+                    Save
+                </button>
+            </div>
+
+            <!-- Display Outputs -->
+            <div class="text-center mt-6">
+                <div class="relative w-full max-w-sm mx-auto p-4 rounded-lg bg-gray-700 transition-colors duration-500" id="tl-container">
+                    <span class="text-3xl font-extrabold text-white tracking-wider" id="tl-display">TL=0.00KW</span>
+                </div>
+                <span class="text-xs text-gray-400 mt-4 block" id="date-modified">Last Updated: N/A</span>
+                <span class="text-xs text-gray-400 mt-2 block" id="user-id-display">User ID: Loading...</span>
+                <div id="status-message" class="status-message text-center font-medium mt-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Import Firebase modules
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        // Get references to the input fields and display elements
+        const ph1Input = document.getElementById('ph1-input');
+        const ph2Input = document.getElementById('ph2-input');
+        const ph3Input = document.getElementById('ph3-input');
+        const thresholdInput = document.getElementById('threshold-input');
+        const pfInput = document.getElementById('pf-input');
+        const calculateButton = document.getElementById('calculate-button');
+        const saveButton = document.getElementById('save-button');
+        const tlDisplay = document.getElementById('tl-display');
+        const tlContainer = document.getElementById('tl-container');
+        const dateModifiedDisplay = document.getElementById('date-modified');
+        const userIdDisplay = document.getElementById('user-id-display');
+        const statusMessageDiv = document.getElementById('status-message');
+
+        // Fixed parameters for calculations
+        const threePhaseVoltage = 380; // Volts for total load calculation
+        const singlePhaseVoltage = 230; // Volts for individual phase power display
+        const sqrt3 = 1.732; // Approximation for Math.sqrt(3)
+
+        // Firebase variables
+        let db;
+        let auth;
+        let currentUserId = null;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Initialize Chart.js context and chart object
+        const ctx = document.getElementById('loadChart').getContext('2d');
+        let loadChart;
+
+        /**
+         * Displays a temporary status message to the user.
+         * @param {string} message - The message to display.
+         * @param {string} type - 'success', 'error', or 'info' for styling.
+         */
+        function showStatusMessage(message, type = 'info') {
+            statusMessageDiv.textContent = message;
+            statusMessageDiv.className = `status-message font-medium mt-4`;
+            
+            // Apply different Tailwind classes based on message type
+            switch (type) {
+                case 'success':
+                    statusMessageDiv.classList.add('text-green-400');
+                    break;
+                case 'error':
+                    statusMessageDiv.classList.add('text-red-400');
+                    break;
+                case 'info':
+                    statusMessageDiv.classList.add('text-blue-400');
+                    break;
+                default:
+                    statusMessageDiv.classList.add('text-gray-400');
+            }
+            
+            setTimeout(() => {
+                statusMessageDiv.textContent = '';
+            }, 5000);
+        }
+
+        /**
+         * Calculates power in KW for a single phase.
+         * @param {number} current - Current in Amperes (A).
+         * @param {number} powerFactor - The power factor value.
+         * @returns {number} The calculated single-phase power in Kilowatts (KW).
+         */
+        function calculateSinglePhasePower(current, powerFactor) {
+            const safeCurrent = parseFloat(current) || 0;
+            const safePF = parseFloat(powerFactor) || 0;
+            return (safeCurrent * singlePhaseVoltage * safePF) / 1000;
+        }
+
+        /**
+         * Calculates the total load (TL) based on the average of the three phases.
+         * @param {number} ph1 - Current for Phase 1.
+         * @param {number} ph2 - Current for Phase 2.
+         * @param {number} ph3 - Current for Phase 3.
+         * @param {number} powerFactor - The power factor value.
+         * @returns {number} The calculated total load in Kilowatts (KW).
+         */
+        function calculateTotalLoad(ph1, ph2, ph3, powerFactor) {
+            const safePh1 = parseFloat(ph1) || 0;
+            const safePh2 = parseFloat(ph2) || 0;
+            const safePh3 = parseFloat(ph3) || 0;
+            const safePF = parseFloat(powerFactor) || 0;
+            const averageCurrent = (safePh1 + safePh2 + safePh3) / 3;
+            return (averageCurrent * threePhaseVoltage * sqrt3 * safePF) / 1000;
+        }
+
+        /**
+         * Updates the Chart.js instance with new data.
+         * @param {object} data - An object containing the load values.
+         */
+        function updateChart(data) {
+            if (loadChart) {
+                loadChart.data.datasets[0].data = [
+                    data.ph1Power.toFixed(2),
+                    data.ph2Power.toFixed(2),
+                    data.ph3Power.toFixed(2),
+                    data.totalLoad.toFixed(2)
+                ];
+                loadChart.update();
+            }
+        }
+
+        /**
+         * Checks the total load against the threshold and applies a visual alert if needed.
+         * @param {number} totalLoad - The calculated total load.
+         * @param {number} threshold - The user-defined threshold.
+         */
+        function checkAlertThreshold(totalLoad, threshold) {
+            if (totalLoad > threshold) {
+                if (!tlContainer.classList.contains('alert-flash')) {
+                    tlContainer.classList.add('alert-flash');
+                }
+            } else {
+                tlContainer.classList.remove('alert-flash');
+            }
+        }
+
+        /**
+         * Initializes the Chart.js instance.
+         */
+        function initializeChart() {
+            loadChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['PH1 (KW)', 'PH2 (KW)', 'PH3 (KW)', 'Total Load (KW)'],
+                    datasets: [{
+                        label: 'Load (KW)',
+                        data: [0, 0, 0, 0],
+                        backgroundColor: [
+                            'rgba(251, 191, 36, 0.8)', // Amber for PH1
+                            'rgba(168, 85, 247, 0.8)', // Purple for PH2
+                            'rgba(6, 182, 212, 0.8)',  // Cyan for PH3
+                            'rgba(34, 197, 94, 0.8)'   // Green for Total Load
+                        ],
+                        borderColor: [
+                            'rgb(251, 191, 36)',
+                            'rgb(168, 85, 247)',
+                            'rgb(6, 182, 212)',
+                            'rgb(34, 197, 94)'
+                        ],
+                        borderWidth: 1,
+                        borderRadius: 5,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Power (KW)',
+                                color: 'white',
+                                font: { size: 14 }
+                            },
+                            ticks: { color: '#e2e8f0' },
+                            grid: { color: 'rgba(226, 232, 240, 0.1)' }
+                        },
+                        x: {
+                            ticks: { color: '#e2e8f0' },
+                            grid: { color: 'rgba(226, 232, 240, 0.1)' }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        title: {
+                            display: true,
+                            text: 'Current Load Distribution',
+                            color: 'white',
+                            font: { size: 18, weight: 'bold' }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(31, 41, 55, 0.9)',
+                            titleColor: 'white',
+                            bodyColor: 'white',
+                            borderColor: 'rgba(255, 255, 255, 0.2)',
+                            borderWidth: 1,
+                        }
+                    }
+                }
+            });
+        }
+        
+        /**
+         * Performs local calculations and updates the UI and chart.
+         */
+        function updateDisplayAndChart() {
+            const ph1Current = parseFloat(ph1Input.value) || 0;
+            const ph2Current = parseFloat(ph2Input.value) || 0;
+            const ph3Current = parseFloat(ph3Input.value) || 0;
+            const threshold = parseFloat(thresholdInput.value) || 0;
+            const powerFactor = parseFloat(pfInput.value) || 0.9;
+
+            const ph1Power = calculateSinglePhasePower(ph1Current, powerFactor);
+            const ph2Power = calculateSinglePhasePower(ph2Current, powerFactor);
+            const ph3Power = calculateSinglePhasePower(ph3Current, powerFactor);
+            const totalLoad = calculateTotalLoad(ph1Current, ph2Current, ph3Current, powerFactor);
+
+            tlDisplay.textContent = `TL=${totalLoad.toFixed(2)}KW`;
+            
+            updateChart({ ph1Power, ph2Power, ph3Power, totalLoad });
+            checkAlertThreshold(totalLoad, threshold);
+        }
+
+        /**
+         * Saves the current load data to Firestore.
+         */
+        async function saveLoadData() {
+            if (!currentUserId) {
+                showStatusMessage("User not authenticated. Please wait.", 'error');
+                return;
+            }
+
+            try {
+                showStatusMessage("Saving data...", 'info');
+                const ph1Current = parseFloat(ph1Input.value) || 0;
+                const ph2Current = parseFloat(ph2Input.value) || 0;
+                const ph3Current = parseFloat(ph3Input.value) || 0;
+                const threshold = parseFloat(thresholdInput.value) || 0;
+                const powerFactor = parseFloat(pfInput.value) || 0.9;
+
+                const ph1Power = calculateSinglePhasePower(ph1Current, powerFactor);
+                const ph2Power = calculateSinglePhasePower(ph2Current, powerFactor);
+                const ph3Power = calculateSinglePhasePower(ph3Current, powerFactor);
+                const totalLoad = calculateTotalLoad(ph1Current, ph2Current, ph3Current, powerFactor);
+                const dateModified = new Date().toLocaleString();
+
+                const docRef = doc(db, `artifacts/${appId}/users/${currentUserId}/load_data/current_load`);
+                await setDoc(docRef, {
+                    ph1Current, ph2Current, ph3Current,
+                    ph1Power, ph2Power, ph3Power,
+                    totalLoad,
+                    threshold,
+                    powerFactor,
+                    dateModified
+                });
+                showStatusMessage("Data saved successfully!", 'success');
+            } catch (error) {
+                console.error("Error saving document:", error);
+                showStatusMessage(`Error saving data: ${error.message}`, 'error');
+            }
+        }
+        
+        // Event listeners
+        calculateButton.addEventListener('click', updateDisplayAndChart);
+        saveButton.addEventListener('click', saveLoadData);
+
+        // Add event listeners to input fields for real-time updates as user types
+        ph1Input.addEventListener('input', updateDisplayAndChart);
+        ph2Input.addEventListener('input', updateDisplayAndChart);
+        ph3Input.addEventListener('input', updateDisplayAndChart);
+        thresholdInput.addEventListener('input', () => {
+            const currentLoad = parseFloat(tlDisplay.textContent.split('=')[1]) || 0;
+            const threshold = parseFloat(thresholdInput.value) || 0;
+            checkAlertThreshold(currentLoad, threshold);
+        });
+        pfInput.addEventListener('input', updateDisplayAndChart);
+
+        // Initialize Firebase and set up data listener on window load
+        window.onload = function() {
+            const firebaseApp = initializeApp(firebaseConfig);
+            db = getFirestore(firebaseApp);
+            auth = getAuth(firebaseApp);
+
+            initializeChart();
+
+            // Authenticate user and set up Firestore listener
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    currentUserId = user.uid;
+                    userIdDisplay.textContent = `User ID: ${currentUserId}`;
+                    const userDocRef = doc(db, `artifacts/${appId}/users/${currentUserId}/load_data/current_load`);
+
+                    try {
+                        onSnapshot(userDocRef, (docSnap) => {
+                            if (docSnap.exists()) {
+                                const data = docSnap.data();
+                                ph1Input.value = data.ph1Current;
+                                ph2Input.value = data.ph2Current;
+                                ph3Input.value = data.ph3Current;
+                                thresholdInput.value = data.threshold;
+                                pfInput.value = data.powerFactor;
+                                tlDisplay.textContent = `TL=${data.totalLoad.toFixed(2)}KW`;
+                                dateModifiedDisplay.textContent = `Last Updated: ${data.dateModified}`;
+                                updateChart(data);
+                                checkAlertThreshold(data.totalLoad, data.threshold);
+                                showStatusMessage("Data loaded successfully.", 'success');
+                            } else {
+                                console.log("No saved data found. Initializing with default values.");
+                                updateDisplayAndChart();
+                                saveLoadData();
+                                showStatusMessage("No previous data found. Initializing...", 'info');
+                            }
+                        }, (error) => {
+                            console.error("Error listening to document:", error);
+                            showStatusMessage(`Error loading data: ${error.message}`, 'error');
+                        });
+                    } catch (error) {
+                        console.error("Error setting up onSnapshot listener:", error);
+                        showStatusMessage(`Error setting up data listener: ${error.message}`, 'error');
+                    }
+                } else {
+                    try {
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (error) {
+                        console.error("Error during authentication:", error);
+                        userIdDisplay.textContent = `Authentication failed: ${error.message}`;
+                        showStatusMessage(`Authentication failed: ${error.message}`, 'error');
+                    }
+                }
+            });
+        };
+    </script>
+</body>
+</html>
